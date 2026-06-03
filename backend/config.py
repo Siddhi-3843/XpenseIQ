@@ -26,3 +26,4 @@ if not DATABASE_URL:
 
 if not ANTHROPIC_API_KEY:
     print("WARNING: ANTHROPIC_API_KEY is not set in .env")
+    
