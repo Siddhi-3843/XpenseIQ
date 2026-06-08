@@ -62,10 +62,19 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> dict:
 
         # Convert PDF pages to list of PIL Images
         # poppler_path tells pdf2image where poppler is installed
-        images = convert_from_bytes(
-            pdf_bytes,
-            poppler_path=r"C:\Users\ASUS\Downloads\Release-26.02.0-0\poppler\Library\bin"
-        )
+        import platform
+import os
+
+# Use Windows path locally, Linux path on Railway/Docker
+if platform.system() == "Windows":
+    poppler_path = r"C:\Users\ASUS\Downloads\Release-26.02.0-0\poppler\Library\bin"
+else:
+    poppler_path = None  # On Linux, poppler is in PATH automatically
+
+images = convert_from_bytes(
+    pdf_bytes,
+    poppler_path=poppler_path
+)
 
         all_text = ""
         all_confidences = []
