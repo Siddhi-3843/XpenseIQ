@@ -1,15 +1,18 @@
 # ocr_service.py
-# Updated to support:
-# - Images: JPG, PNG, WEBP, TIFF, BMP
-# - PDF files (using poppler + pdf2image)
+# Handles OCR for images and PDFs.
+# Supports JPG, PNG, WEBP, TIFF, BMP and PDF formats.
+# Works on both Windows (local) and Linux (Railway/Docker).
 
 import pytesseract
 from PIL import Image
 import io
 import re
+import platform
 
-# Tell pytesseract where Tesseract is installed
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Tell pytesseract where Tesseract is installed on Windows
+# On Linux (Railway), Tesseract is in PATH automatically
+if platform.system() == "Windows":
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 
 def extract_text_from_image(image_bytes: bytes) -> dict:
@@ -18,20 +21,14 @@ def extract_text_from_image(image_bytes: bytes) -> dict:
     Supports JPG, PNG, WEBP, TIFF, BMP formats.
     """
 
-    # Convert raw bytes into PIL Image
     image = Image.open(io.BytesIO(image_bytes))
-
-    # Convert to RGB for consistent results
     image = image.convert("RGB")
 
-    # Run OCR
     raw_text = pytesseract.image_to_string(image, lang="eng")
 
-    # Get confidence data
     from pytesseract import Output
     data = pytesseract.image_to_data(image, output_type=Output.DICT)
 
-    # Calculate average confidence
     confidences = [
         int(c) for c in data["conf"]
         if str(c).strip() != "-1" and str(c).strip() != ""
@@ -39,7 +36,6 @@ def extract_text_from_image(image_bytes: bytes) -> dict:
     avg_confidence = sum(confidences) / len(confidences) if confidences else 0
     confidence_score = round(avg_confidence / 100, 2)
 
-    # Clean the text
     cleaned_text = clean_ocr_text(raw_text)
 
     return {
@@ -56,38 +52,32 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> dict:
     Extracts text from a PDF file.
     Uses poppler to convert each page to an image,
     then runs Tesseract OCR on each page.
+    Works on Windows locally and Linux on Railway.
     """
     try:
         from pdf2image import convert_from_bytes
 
-        # Convert PDF pages to list of PIL Images
-        # poppler_path tells pdf2image where poppler is installed
-        import platform
-import os
+        # On Windows use the local poppler path
+        # On Linux (Railway/Docker) poppler is installed via apt-get
+        # and is automatically available in PATH — pass None
+        if platform.system() == "Windows":
+            poppler_path = r"C:\Users\ASUS\Downloads\Release-26.02.0-0\poppler\Library\bin"
+        else:
+            poppler_path = None
 
-# Use Windows path locally, Linux path on Railway/Docker
-if platform.system() == "Windows":
-    poppler_path = r"C:\Users\ASUS\Downloads\Release-26.02.0-0\poppler\Library\bin"
-else:
-    poppler_path = None  # On Linux, poppler is in PATH automatically
-
-images = convert_from_bytes(
-    pdf_bytes,
-    poppler_path=poppler_path
-)
+        images = convert_from_bytes(
+            pdf_bytes,
+            poppler_path=poppler_path
+        )
 
         all_text = ""
         all_confidences = []
 
-        # Run OCR on each page
         for i, image in enumerate(images):
             image = image.convert("RGB")
-
-            # Extract text from this page
             page_text = pytesseract.image_to_string(image, lang="eng")
             all_text += f"\n--- Page {i+1} ---\n{page_text}"
 
-            # Get confidence for this page
             from pytesseract import Output
             data = pytesseract.image_to_data(image, output_type=Output.DICT)
             confidences = [
@@ -97,7 +87,6 @@ images = convert_from_bytes(
             if confidences:
                 all_confidences.extend(confidences)
 
-        # Calculate overall confidence
         avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else 0
         confidence_score = round(avg_confidence / 100, 2)
 
@@ -130,16 +119,12 @@ def clean_ocr_text(text: str) -> str:
     and normalizes whitespace.
     """
 
-    # Remove empty lines
     lines = text.split("\n")
     non_empty_lines = [line.strip() for line in lines if line.strip()]
     cleaned = "\n".join(non_empty_lines)
 
-    # Fix common OCR mistakes
     cleaned = cleaned.replace("|", "I")
     cleaned = cleaned.replace("{}", "0")
-
-    # Remove multiple spaces
     cleaned = re.sub(r' +', ' ', cleaned)
 
     return cleaned
