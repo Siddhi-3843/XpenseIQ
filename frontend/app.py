@@ -260,6 +260,27 @@ def show_dashboard():
         st.error(f"Could not load dashboard: {str(e)}")
         return
 
+    # ── AI Insights ──
+    st.divider()
+    st.subheader("🤖 AI Spending Insights")
+
+    try:
+        insights_response = requests.get(
+            f"{BACKEND_URL}/expenses/insights",
+            headers=get_headers()
+        )
+        insights_data = insights_response.json()
+        insights = insights_data.get("insights", [])
+
+        if insights:
+            for i, insight in enumerate(insights):
+                st.info(f"💡 {insight}")
+        else:
+            st.info("Scan more receipts to get personalized AI insights.")
+
+    except Exception as e:
+        st.info("AI insights will appear here once you have expenses.")
+
     # Show pending verification alert
     pending_count = summary.get("pending_count", 0)
     rejected_count = summary.get("rejected_count", 0)

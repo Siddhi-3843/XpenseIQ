@@ -144,3 +144,92 @@ Return ONLY the JSON. No explanation. No markdown. No backticks.
         return {"status": "success", "data": report}
     except Exception as e:
         return {"status": "error", "error": f"Report generation error: {str(e)}"}
+    
+def generate_insights(expenses: list) -> dict:
+    """
+    Analyzes expense records and generates
+    3 simple spending insights using Groq AI.
+    """
+    if not expenses:
+        return {
+            "status": "success",
+            "data": {
+                "insights": [
+                    "No expenses found yet. Start by scanning your first receipt.",
+                    "Upload receipts to get personalized spending insights.",
+                    "XpenseIQ will analyze your patterns once you add expenses."
+                ]
+            }
+        }
+
+    # Build simple summary for AI
+    total = sum(e.get("total_amount", 0) or 0 for e in expenses)
+    categories = {}
+    vendors = {}
+
+    for e in expenses:
+        cat = e.get("primary_category", "Unknown")
+        vendor = e.get("vendor_name", "Unknown")
+        amount = e.get("total_amount", 0) or 0
+
+        categories[cat] = categories.get(cat, 0) + amount
+        vendors[vendor] = vendors.get(vendor, 0) + amount
+
+    top_category = max(categories, key=categories.get) if categories else "Unknown"
+    top_vendor = max(vendors, key=vendors.get) if vendors else "Unknown"
+    top_cat_pct = round(categories.get(top_category, 0) / total * 100) if total else 0
+
+    prompt = f"""
+You are an expense analytics assistant.
+
+Analyze this spending summary and give exactly 3 short, helpful insights.
+Each insight should be one sentence. Be specific with numbers.
+
+Total spend: Rs {total:.0f}
+Number of transactions: {len(expenses)}
+Top category: {top_category} ({top_cat_pct}% of spend)
+Top vendor: {top_vendor}
+Category breakdown: {categories}
+
+Return ONLY a valid JSON object:
+{{
+    "insights": [
+        "insight 1 with specific numbers",
+        "insight 2 with specific numbers",
+        "insight 3 with specific numbers"
+    ]
+}}
+
+Return ONLY the JSON. No explanation. No markdown. No backticks.
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=300
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        if response_text.startswith("```"):
+            response_text = re.sub(r'^```[a-z]*\n?', '', response_text)
+            response_text = re.sub(r'\n?```$', '', response_text)
+            response_text = response_text.strip()
+
+        data = json.loads(response_text)
+        return {"status": "success", "data": data}
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "data": {
+                "insights": [
+                    f"Your top spending category is {top_category} at {top_cat_pct}% of total spend.",
+                    f"Your most visited vendor is {top_vendor}.",
+                    f"You have {len(expenses)} approved transactions totaling Rs {total:.0f}."
+                ]
+            }
+        }    

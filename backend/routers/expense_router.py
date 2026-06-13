@@ -502,6 +502,39 @@ async def scan_bulk_receipts(
 # ═══════════════════════════════════════════════════════════════════════════════
 # PENDING VERIFICATION LIST
 # ═══════════════════════════════════════════════════════════════════════════════
+@router.get("/insights")
+def get_ai_insights(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    """
+    Returns 3 AI-generated insights about spending patterns.
+    Based on approved expenses only.
+    """
+    from services.ai_service import generate_insights
+
+    expenses = db.query(Expense).filter(
+        Expense.user_id == current_user.id,
+        Expense.status == "approved"
+    ).order_by(Expense.created_at.desc()).limit(20).all()
+
+    expense_list = [
+        {
+            "vendor_name": e.vendor_name,
+            "total_amount": e.total_amount,
+            "primary_category": e.primary_category,
+            "transaction_date": e.transaction_date
+        }
+        for e in expenses
+    ]
+
+    result = generate_insights(expense_list)
+
+    return {
+        "status": "success",
+        "insights": result.get("data", {}).get("insights", [])
+    }
+
 
 @router.get("/pending")
 def get_pending_expenses(
