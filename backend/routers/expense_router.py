@@ -231,11 +231,15 @@ async def process_single_file(
     }
 
     try:
-        # Run blocking pipeline in a thread pool so we don't block the event loop
-        pipeline = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: run_full_pipeline(file_bytes, content_type, user_id, db),
-        )
+        # Open a fresh database session for the concurrent pipeline run
+        # to ensure thread-safety across background thread pools.
+        from database import SessionLocal
+        with SessionLocal() as thread_db:
+            # Run blocking pipeline in a thread pool so we don't block the event loop
+            pipeline = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: run_full_pipeline(file_bytes, content_type, user_id, thread_db),
+            )
 
         if not pipeline["success"]:
             result["status"] = "failed"
