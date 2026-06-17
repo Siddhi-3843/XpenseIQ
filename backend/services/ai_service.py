@@ -26,14 +26,21 @@ Return ONLY a valid JSON object with these exact fields:
     "vendor_category_hint": "type of business e.g. restaurant, pharmacy, fuel station or null",
     "line_items": [
         {{
-            "description": "item name",
-            "quantity": numeric or null,
-            "unit_price": numeric or null,
-            "total_price": numeric or null
+            "description": "item name from Name of items column",
+            "quantity": numeric — look for Quantity/Qty/Nos/Pcs/Units column,
+            "unit_price": numeric — look for Rate/Price/MRP/Unit Price column,
+            "total_price": numeric — look for Amount/Total/Value column
         }}
     ],
     "confidence_score": a float between 0.0 and 1.0
 }}
+Line item extraction rules:
+- The quantity column may be labeled: Quantity, Qty, Nos, Pcs, Units, No.
+- The unit price column may be labeled: Rate, Price, MRP, Unit Price, Rate Rs
+- The amount column may be labeled: Amount, Total, Value, Net Amount
+- Always extract the actual number from the Quantity column, never default to 1
+- If quantity column exists but value is missing for a row, use 1
+- unit_price x quantity should approximately equal total_price
 Receipt text:
 {ocr_text}
 Return ONLY the JSON object. No explanation. No markdown. No backticks.
