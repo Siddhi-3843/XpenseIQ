@@ -65,4 +65,4 @@ class Expense(Base):
     # relationship() lets us access the user object from an expense
     # For example: expense.user.email
     # This doesn't create a new column - it's just a Python convenience
-    
+    owner_email = Column(String, nullable=True)
