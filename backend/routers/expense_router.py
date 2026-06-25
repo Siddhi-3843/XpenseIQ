@@ -189,7 +189,10 @@ def run_full_pipeline(
     # Stage 7 — Status
     expense_status = (
         "pending_verification"
-        if fraud_result["fraud_risk_score"] >= 0.5 or fraud_result["requires_manual_review"]
+        if fraud_result["fraud_risk_score"] >= 0.4
+        or fraud_result["requires_manual_review"]
+        or suspiciously_perfect
+        or len(fraud_result.get("fraud_flags", [])) > 0
         else "approved"
     )
 
