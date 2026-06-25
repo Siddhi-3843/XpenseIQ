@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import requests
+import mimetypes
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 
@@ -150,7 +151,13 @@ def show_main_app():
             ("Reports", "reports"),
         ]
         for label, page_key in pages:
-            if st.button(label, use_container_width=True, key=f"nav_{page_key}"):
+            is_active = st.session_state.page == page_key
+            if st.button(
+                label,
+                use_container_width=True,
+                key=f"nav_{page_key}",
+                type="primary" if is_active else "secondary"
+            ):
                 st.session_state.page = page_key
                 st.rerun()
         st.divider()
@@ -171,6 +178,7 @@ def show_main_app():
     page_map.get(st.session_state.page, show_dashboard)()
 
 def show_dashboard():
+    st.cache_data.clear()
     import pandas as pd
 
     st.markdown(
@@ -659,10 +667,11 @@ def show_scan_page():
                     for i, file in enumerate(uploaded_files):
                         status_txt.write(f"Processing {file.name} ({i+1}/{len(uploaded_files)})...")
                         try:
+                            detected_type = file.type or mimetypes.guess_type(file.name)[0] or "application/octet-stream"
                             r = requests.post(
                                 f"{BACKEND_URL}/expenses/scan-receipt",
                                 headers=get_headers(),
-                                files={"file": (file.name, file.getvalue(), file.type)},
+                                files={"file": (file.name, file.getvalue(), detected_type)},
                                 timeout=60
                             )
                             if r.status_code == 200:
@@ -759,6 +768,29 @@ def show_scan_page():
                         st.success("Approved — added to expenses")
                     else:
                         st.warning("Pending Verification — awaiting review")
+
+                    # Allow user to correct the total amount
+                    expense_id = data.get("expense_id")
+                    current_total = extracted.get("total_amount", 0) or 0
+                    corrected = st.number_input(
+                        "Correct Total Amount (if wrong)",
+                        min_value=0.0,
+                        value=float(current_total),
+                        step=0.01,
+                        key=f"correct_amt_{expense_id}"
+                    )
+                    if corrected != current_total:
+                        if st.button("Update Amount", key=f"update_amt_{expense_id}", type="primary"):
+                            r = requests.put(
+                                f"{BACKEND_URL}/expenses/{expense_id}/update-amount",
+                                headers=get_headers(),
+                                params={"amount": corrected}
+                            )
+                            if r.status_code == 200:
+                                st.success(f"Amount updated to Rs {corrected:,.2f}")
+                                st.rerun()
+                            else:
+                                st.error("Failed to update amount")
                     st.markdown(f"""
                     <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
                          padding:14px;margin-top:8px;">
@@ -834,25 +866,33 @@ def show_scan_page():
                     </div>
                     """, unsafe_allow_html=True)
 
-                    st.markdown(f"""
-                    <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
-                         padding:14px;margin-bottom:10px;">
-                      <div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;
-                           letter-spacing:.06em;margin-bottom:8px;">Amount Breakdown</div>
-                      <table style="width:100%;font-size:12px;border-collapse:collapse;">
-                        <tr><td style="color:#6D6578;padding:6px 8px;">Subtotal</td>
-                            <td style="text-align:right;font-weight:500;padding:6px 8px;">Rs {extracted.get('subtotal','—')}</td></tr>
-                        <tr><td style="color:#6D6578;padding:6px 8px;">{extracted.get('tax_type','Tax')}</td>
-                            <td style="text-align:right;font-weight:500;padding:6px 8px;">Rs {extracted.get('tax_amount','—')}</td></tr>
-                        <tr style="border-top:1px solid #EAE2EE;">
-                          <td style="font-weight:700;color:#1C1424;padding:8px 8px 4px 8px;">Total</td>
-                          <td style="text-align:right;font-weight:700;color:#AA225B;font-size:14px;padding:8px 8px 4px 8px;">
-                            Rs {extracted.get('total_amount',0):,.2f}
-                          </td>
-                        </tr>
-                      </table>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Build amount breakdown rows dynamically
+                    _sub  = extracted.get('subtotal') or 0
+                    _disc = extracted.get('discount_amount') or 0
+                    _xtra = extracted.get('extra_charges') or 0
+                    _sc   = extracted.get('service_charge') or 0
+                    _tax  = extracted.get('tax_amount') or 0
+                    _ttyp = extracted.get('tax_type') or 'GST'
+                    _tot  = extracted.get('total_amount') or 0
+
+                    _rows = ""
+                    if _sub:  _rows += f'<tr><td style="color:#6D6578;padding:5px 8px;">Item Subtotal</td><td style="text-align:right;padding:5px 8px;">Rs {_sub:,.2f}</td></tr>'
+                    if _disc: _rows += f'<tr><td style="color:#22C55E;padding:5px 8px;">Discount / Offer</td><td style="text-align:right;color:#22C55E;padding:5px 8px;">- Rs {_disc:,.2f}</td></tr>'
+                    if _xtra: _rows += f'<tr><td style="color:#6D6578;padding:5px 8px;">Delivery / Platform Fee</td><td style="text-align:right;padding:5px 8px;">Rs {_xtra:,.2f}</td></tr>'
+                    if _sc:   _rows += f'<tr><td style="color:#6D6578;padding:5px 8px;">Service Charge</td><td style="text-align:right;padding:5px 8px;">Rs {_sc:,.2f}</td></tr>'
+                    if _tax:  _rows += f'<tr><td style="color:#6D6578;padding:5px 8px;">{_ttyp}</td><td style="text-align:right;padding:5px 8px;">Rs {_tax:,.2f}</td></tr>'
+
+                    st.markdown(
+                        '<div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;padding:14px;margin-bottom:10px;">'
+                        '<div style="font-size:11px;font-weight:700;color:#6D6578;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Amount Breakdown</div>'
+                        '<table style="width:100%;font-size:12px;border-collapse:collapse;">'
+                        + _rows +
+                        '<tr style="border-top:2px solid #EAE2EE;">'
+                        '<td style="font-weight:700;color:#1C1424;padding:8px 8px 4px 8px;">Total</td>'
+                        f'<td style="text-align:right;font-weight:700;color:#AA225B;font-size:14px;padding:8px 8px 4px 8px;">Rs {_tot:,.2f}</td>'
+                        '</tr></table></div>',
+                        unsafe_allow_html=True
+                    )
 
                     st.markdown(f"""
                     <div style="background:#FBF8FC;border:1px solid #EAE2EE;border-radius:12px;
@@ -933,6 +973,7 @@ def show_scan_page():
                     """, unsafe_allow_html=True)
     
 def show_expenses_page():
+    st.cache_data.clear()
     import pandas as pd
     st.title("My Expenses")
     st.caption("Showing approved expenses only.")
@@ -1146,18 +1187,38 @@ def show_expenses_page():
             </div>
             """, unsafe_allow_html=True)
 
+            import io as _io
+            #import openpyxl
+
+            # CSV download
             csv = df_all.to_csv(index=False)
             st.download_button(
-                "⬇ Download as CSV", data=csv,
-                file_name="expenses.csv", mime="text/csv"
+                "⬇ Download as CSV",
+                data=csv,
+                file_name="expenses.csv",
+                mime="text/csv"
             )
+
+            # Excel download
+            try:
+                excel_buf = _io.BytesIO()
+                df_all.to_excel(excel_buf, index=False, sheet_name="Expenses", engine="openpyxl")
+                excel_buf.seek(0)
+                st.download_button(
+                    "⬇ Download as Excel",
+                    data=excel_buf.getvalue(),
+                    file_name="expenses.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            except Exception as excel_err:
+                st.warning(f"Excel export unavailable: {str(excel_err)}")
         else:
             st.info("No expenses found.")
     except Exception as e:
         st.error(f"Could not load expenses: {str(e)}")
 
-
 def show_pending_page():
+    st.cache_data.clear()
     st.title("Pending Verification")
     st.caption("Flagged expenses awaiting review. These are NOT counted in totals.")
 
@@ -1290,7 +1351,7 @@ def show_pending_page():
                             r = requests.put(
                                 f"{BACKEND_URL}/expenses/{expense_id}/approve",
                                 headers=get_headers(),
-                                params={"owner_email": owner_email}
+                                params={"vendor_email": owner_email}
                             )
                             del st.session_state[confirm_key]
                             if r.status_code == 200:
@@ -1326,10 +1387,7 @@ def show_pending_page():
                             r = requests.put(
                                 f"{BACKEND_URL}/expenses/{expense_id}/reject",
                                 headers=get_headers(),
-                                params={
-                                    "owner_email": owner_email,
-                                    "rejection_reason": rejection_reason
-                                }
+                                params={"vendor_email": owner_email}
                             )
                             del st.session_state[confirm_key]
                             if r.status_code == 200:
@@ -1356,6 +1414,7 @@ def show_pending_page():
                         st.rerun()
 
 def show_rejected_page():
+    st.cache_data.clear()
     import pandas as pd
     st.title("Rejected Expenses")
     st.caption("Archived expenses excluded from all calculations.")
@@ -1371,8 +1430,56 @@ def show_rejected_page():
             st.info("No rejected expenses.")
             return
 
-        st.error(f"{len(expenses)} rejected expense(s) archived.")
+        total_rejected = len(expenses)
+        total_blocked  = sum(e.get("total_amount", 0) or 0 for e in expenses)
+        avg_risk = sum(e.get("fraud_risk_score", 0) or 0 for e in expenses) / total_rejected
 
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border-radius:16px;padding:22px 24px;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:110px;
+                 border-top:4px solid #EF4444;">
+              <div style="font-size:11px;font-weight:700;color:#8A6D7C;
+                   text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Total Rejected</div>
+              <div style="font-size:36px;font-weight:800;color:#2D1B2E;line-height:1;margin-bottom:12px;">{total_rejected}</div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#EF4444;flex-shrink:0;"></div>
+                <span style="font-size:12px;font-weight:600;color:#EF4444;">Needs immediate review</span>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with k2:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border-radius:16px;padding:22px 24px;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:110px;
+                 border-top:4px solid #F59E0B;">
+              <div style="font-size:11px;font-weight:700;color:#8A6D7C;
+                   text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Amount Blocked</div>
+              <div style="font-size:36px;font-weight:800;color:#2D1B2E;line-height:1;margin-bottom:12px;">Rs {total_blocked:,.0f}</div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#F59E0B;flex-shrink:0;"></div>
+                <span style="font-size:12px;font-weight:600;color:#F59E0B;">Monitor closely</span>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with k3:
+            st.markdown(f"""
+            <div style="background:#FFFFFF;border-radius:16px;padding:22px 24px;
+                 box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:110px;
+                 border-top:4px solid #22C55E;">
+              <div style="font-size:11px;font-weight:700;color:#8A6D7C;
+                   text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">Avg Risk Score</div>
+              <div style="font-size:36px;font-weight:800;color:#2D1B2E;line-height:1;margin-bottom:12px;">{avg_risk:.2f}</div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div style="width:10px;height:10px;border-radius:50%;background:#22C55E;flex-shrink:0;"></div>
+                <span style="font-size:12px;font-weight:600;color:#22C55E;">Likely clean</span>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+        
         rows_html = ""
         for expense in expenses:
             vendor = expense.get("vendor_name", "—") or "—"
