@@ -180,8 +180,21 @@ def run_full_pipeline(
     )
 
     # Stage 7 — Status
-    ocr_conf           = ocr_result.get("confidence_score", 0)
+    ocr_conf             = ocr_result.get("confidence_score", 0)
     suspiciously_perfect = ocr_conf >= 0.95 and not extracted_data.get("gstin")
+    low_ocr_confidence   = ocr_conf < 0.50
+
+    # If OCR confidence is below 50%, boost fraud score above 0.3
+    # so the bill is never auto-approved
+    if low_ocr_confidence:
+        fraud_result["fraud_risk_score"] = max(
+            fraud_result["fraud_risk_score"], 0.35
+        )
+        if "Low OCR confidence — receipt may be unclear or fake" not in fraud_result["fraud_flags"]:
+            fraud_result["fraud_flags"].append(
+                f"OCR confidence {ocr_conf:.0%} is below 50% — bill requires manual verification"
+            )
+        fraud_result["requires_manual_review"] = True
 
     expense_status = (
         "pending_verification"
