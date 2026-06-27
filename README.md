@@ -139,33 +139,8 @@ Our fraud engine checks 6 rules and assigns a cumulative risk score from 0.0 to 
 6. **High value** — transactions above Rs 50,000 flagged for review
 7. **AI generated bills** - if bills have wrong GSTIN number 
 
-Risk score above 0.5 triggers manual review flag.
+Risk score above 0.3 triggers manual review flag.
 
-## Database Schema
-users
-id              PRIMARY KEY
-email           UNIQUE NOT NULL
-hashed_password NOT NULL
-full_name
-created_at
-expenses
-id                     PRIMARY KEY
-user_id                FOREIGN KEY → users.id
-vendor_name
-total_amount
-primary_category
-subcategory
-fraud_risk_score
-is_duplicate
-requires_manual_review
-fraud_flags            JSON
-extracted_data         JSON
-raw_ocr_text
-confidence_score
-transaction_date
-receipt_number
-gstin
-created_at
 
 ## CI/CD Pipeline
 
@@ -177,9 +152,9 @@ Every push to the main branch triggers GitHub Actions which:
 
 ## Author
 
-Siddhi Deshmukh
-Mayuri Shinde
-Samruddhi Misal 
-Priyanka Bhosale
+1. Siddhi Deshmukh
+2. Mayuri Shinde
+3. Samruddhi Misal 
+4. Priyanka Bhosale
 - GitHub: https://github.com/Siddhi-3843
 - Project: XpenseIQ — AI Expense Scanner
