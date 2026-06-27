@@ -14,7 +14,7 @@ An enterprise-grade AI-powered expense management system that automatically extr
 
 ## Features
 
-- **OCR Pipeline** — Extracts text from receipt images (JPG, PNG, WEBP, TIFF, BMP) and PDFs using Tesseract
+- **OCR Pipeline** — Extracts text from receipt images (JPG, PNG, WEBP, TIFF, BMP) and PDFs using VISION AI OCR
 - **AI Extraction** — Groq LLaMA 3.3 70B extracts vendor name, amount, date, GSTIN, tax, payment method, and line items
 - **Expense Classification** — Automatically categorizes expenses into 10 categories (Food, Travel, Health, etc.)
 - **Fraud Detection** — 6-rule engine assigns fraud risk score (0.0–1.0) with duplicate detection
