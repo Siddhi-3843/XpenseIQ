@@ -950,7 +950,8 @@ def show_scan_page():
                     """, unsafe_allow_html=True)
 
                     risk_color = "#EC105C" if risk >= 0.5 else "#c2410c" if risk >= 0.3 else "#8E40B0"
-                    risk_label = "HIGH RISK" if risk >= 0.5 else "MEDIUM" if risk >= 0.3 else "LOW RISK"
+                    risk_label  = "HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.3 else "LOW"
+                    risk_icon   = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}[risk_label]
                     risk_bg = "#fff5f5" if risk >= 0.5 else "#fffbf0" if risk >= 0.3 else "#f5edfb"
                     flags = fraud.get("fraud_flags", [])
                     flags_html = "".join(
@@ -1091,8 +1092,8 @@ def show_pending_page():
         expense_id = expense.get("id")
         risk = expense.get("fraud_risk_score", 0) or 0
         flags = expense.get("fraud_flags", [])
-        risk_label = "HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.5 else "LOW"
-        risk_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}[risk_label]
+        risk_label  = "HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.3 else "LOW"
+        risk_icon   = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}[risk_label]
         confirm_key = f"confirm_{expense_id}"
 
         with st.expander(
@@ -1111,7 +1112,7 @@ def show_pending_page():
             with col2:
                 if risk >= 0.7:
                     st.error(f"🔴 Fraud Risk: {risk:.2f} — {risk_label}")
-                elif risk >= 0.5:
+                elif risk >= 0.3:
                     st.warning(f"🟡 Fraud Risk: {risk:.2f} — {risk_label}")
                 else:
                     st.info(f"🟢 Fraud Risk: {risk:.2f} — {risk_label}")
@@ -1348,7 +1349,7 @@ def show_expenses_page():
                     risk_label = "High Risk"
                     bar_color = "#991B1B"
                     risk_text_color = "#991B1B"
-                elif risk >= 0.4:
+                elif risk >= 0.3:
                     risk_label = "Medium Risk"
                     bar_color = "#E91E63"
                     risk_text_color = "#E91E63"
@@ -1822,7 +1823,7 @@ def show_reports_page():
                     risk_color = "#991B1B"
                     bar_color = "#991B1B"
                     risk_text_color = "#991B1B"
-                elif risk >= 0.4:
+                elif risk >= 0.3:
                     risk_label = "Medium Risk"
                     risk_color = "#E91E63"
                     bar_color = "#E91E63"
