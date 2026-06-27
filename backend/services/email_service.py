@@ -1,17 +1,14 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
+import json
+import urllib.request
+import urllib.error
 from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-FROM_NAME = "XpenseIQ"
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+FROM_EMAIL     = "XpenseIQ <onboarding@resend.dev>"
 
 
 def send_verification_email(
@@ -25,10 +22,10 @@ def send_verification_email(
     transaction_date: str = None,
 ) -> dict:
     try:
-        verified_at = datetime.now().strftime("%d %b %Y, %I:%M %p")
-        status_color = "#22C55E" if status == "approved" else "#EF4444"
-        status_label = "Approved" if status == "approved" else "Rejected"
-        status_icon = "✅" if status == "approved" else "❌"
+        verified_at   = datetime.now().strftime("%d %b %Y, %I:%M %p")
+        status_color  = "#22C55E" if status == "approved" else "#EF4444"
+        status_label  = "Approved" if status == "approved" else "Rejected"
+        status_icon   = "✅" if status == "approved" else "❌"
 
         rejection_row = ""
         if status == "rejected" and rejection_reason:
@@ -46,22 +43,19 @@ def send_verification_email(
         <!DOCTYPE html>
         <html>
         <head><meta charset="UTF-8"></head>
-        <body style="margin:0;padding:0;background:#FDF4F7;font-family:Inter,Arial,sans-serif;">
+        <body style="margin:0;padding:0;background:#FDF4F7;font-family:Arial,sans-serif;">
           <div style="max-width:560px;margin:40px auto;background:#ffffff;
                border-radius:16px;border:1px solid #F0DCE4;
                box-shadow:0 4px 24px rgba(45,27,46,0.08);overflow:hidden;">
 
-            <!-- Header -->
             <div style="background:linear-gradient(135deg,#E91E63,#AA225B);
                  padding:28px 32px;text-align:center;">
-              <div style="font-size:24px;font-weight:800;color:#ffffff;
-                   letter-spacing:-0.5px;">XpenseIQ</div>
+              <div style="font-size:24px;font-weight:800;color:#ffffff;">XpenseIQ</div>
               <div style="font-size:13px;color:rgba(255,255,255,0.85);margin-top:4px;">
                 AI-Powered Smart Expense Scanner
               </div>
             </div>
 
-            <!-- Status Banner -->
             <div style="background:{status_color}15;border-bottom:3px solid {status_color};
                  padding:20px 32px;text-align:center;">
               <div style="font-size:28px;margin-bottom:6px;">{status_icon}</div>
@@ -73,13 +67,8 @@ def send_verification_email(
               </div>
             </div>
 
-            <!-- Details Table -->
             <div style="padding:24px 32px 8px;">
-              <div style="font-size:14px;font-weight:700;color:#2D1B2E;margin-bottom:12px;">
-                Expense Details
-              </div>
-              <table style="width:100%;border-collapse:collapse;border-radius:10px;
-                     overflow:hidden;border:1px solid #F0DCE4;">
+              <table style="width:100%;border-collapse:collapse;border:1px solid #F0DCE4;">
                 <tr>
                   <td style="padding:10px 16px;color:#8A6D7C;font-size:13px;
                        background:#FCF7F9;border-bottom:1px solid #F0DCE4;width:40%;">
@@ -92,7 +81,7 @@ def send_verification_email(
                 </tr>
                 <tr>
                   <td style="padding:10px 16px;color:#8A6D7C;font-size:13px;border-bottom:1px solid #F0DCE4;">
-                    Vendor / Description
+                    Vendor
                   </td>
                   <td style="padding:10px 16px;font-weight:600;color:#2D1B2E;font-size:13px;border-bottom:1px solid #F0DCE4;">
                     {vendor_name or 'N/A'}
@@ -150,7 +139,6 @@ def send_verification_email(
               </table>
             </div>
 
-            <!-- Footer -->
             <div style="padding:24px 32px;text-align:center;border-top:1px solid #F0DCE4;margin-top:16px;">
               <div style="font-size:12px;color:#8A6D7C;">
                 This is an automated notification from
@@ -163,23 +151,32 @@ def send_verification_email(
         </html>
         """
 
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"XpenseIQ — Expense #{expense_id} {status_label}"
-        msg["From"] = f"{FROM_NAME} <{SMTP_USER}>"
-        msg["To"] = to_email
-        msg.attach(MIMEText(html, "html"))
+        payload = json.dumps({
+            "from":    FROM_EMAIL,
+            "to":      [to_email],
+            "subject": f"XpenseIQ — Expense #{expense_id} {status_label}",
+            "html":    html,
+        }).encode("utf-8")
 
-        if SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
-                server.login(SMTP_USER, SMTP_PASS)
-                server.sendmail(SMTP_USER, to_email, msg.as_string())
-        else:
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASS)
-                server.sendmail(SMTP_USER, to_email, msg.as_string())
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type":  "application/json",
+            },
+            method="POST",
+        )
 
-        return {"success": True}
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp_body = resp.read().decode("utf-8")
+            print(f"RESEND SUCCESS: {resp_body}")
+            return {"success": True}
 
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        print(f"RESEND HTTP ERROR {e.code}: {error_body}")
+        return {"success": False, "error": f"HTTP {e.code}: {error_body}"}
     except Exception as e:
+        print(f"RESEND ERROR: {str(e)}")
         return {"success": False, "error": str(e)}
