@@ -1139,7 +1139,7 @@ def show_pending_page():
                             r = requests.put(
                                 f"{BACKEND_URL}/expenses/{expense_id}/approve",
                                 headers=get_headers(),
-                                params={"vendor_email": owner_email}
+                                params={"owner_email": owner_email}   # ← must be owner_email
                             )
                             del st.session_state[confirm_key]
                             if r.status_code == 200:
@@ -1175,7 +1175,10 @@ def show_pending_page():
                             r = requests.put(
                                 f"{BACKEND_URL}/expenses/{expense_id}/reject",
                                 headers=get_headers(),
-                                params={"vendor_email": owner_email}
+                                params={
+                                    "owner_email": owner_email,        # ← must be owner_email
+                                    "rejection_reason": rejection_reason
+                                }
                             )
                             del st.session_state[confirm_key]
                             if r.status_code == 200:
