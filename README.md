@@ -35,7 +35,7 @@ Streamlit Dashboard (frontend)
 FastAPI Backend (REST API)
 ↓
 6-Stage AI Pipeline:
-Stage 1 → Tesseract OCR extracts raw text
+Stage 1 → VISION AI OCR extracts raw text
 Stage 2 → Groq LLaMA extracts structured data
 Stage 3 → Classifies expense category
 Stage 4 → Fraud detection with 6 rules
@@ -52,7 +52,7 @@ PostgreSQL on Supabase (cloud database)
 | Frontend | Streamlit (Python) |
 | Backend | FastAPI + Uvicorn |
 | AI/LLM | Groq API (LLaMA 3.3 70B) |
-| OCR | Tesseract + pytesseract |
+| OCR | Vision AI |
 | PDF Processing | pdf2image + Poppler |
 | Database | PostgreSQL (Supabase) |
 | ORM | SQLAlchemy |
@@ -66,7 +66,7 @@ PostgreSQL on Supabase (cloud database)
 ### Prerequisites
 
 - Python 3.11+
-- Tesseract OCR installed
+- VISION AI  OCR installed
 - Poppler installed (for PDF support)
 - PostgreSQL database (Supabase recommended)
 - Groq API key (free at console.groq.com)
@@ -137,6 +137,7 @@ Our fraud engine checks 6 rules and assigns a cumulative risk score from 0.0 to 
 4. **Weekend B2B transaction** — office suppliers closed on weekends
 5. **Duplicate detection** — same vendor and amount within 90-day window
 6. **High value** — transactions above Rs 50,000 flagged for review
+7. **AI generated bills** - if bills have wrong GSTIN number 
 
 Risk score above 0.5 triggers manual review flag.
 
@@ -166,40 +167,6 @@ receipt_number
 gstin
 created_at
 
-## Project Structure
-XpenseIQ/
-├── backend/
-│   ├── models/
-│   │   ├── expense.py       SQLAlchemy expense table
-│   │   └── user.py          SQLAlchemy user table
-│   ├── routers/
-│   │   ├── auth_router.py   Login, register, JWT endpoints
-│   │   ├── expense_router.py Scan, list, filter endpoints
-│   │   └── report_router.py Report generation endpoints
-│   ├── services/
-│   │   ├── ocr_service.py   Tesseract OCR pipeline
-│   │   ├── ai_service.py    Groq LLaMA integration
-│   │   ├── fraud_service.py Fraud detection engine
-│   │   └── auth_service.py  JWT token management
-│   ├── schemas/
-│   ├── config.py            Environment variable loader
-│   ├── database.py          SQLAlchemy connection setup
-│   └── main.py              FastAPI application entry point
-├── frontend/
-│   ├── pages/
-│   └── app.py               Streamlit dashboard
-├── tests/
-│   ├── test_ocr.py
-│   ├── test_ai.py
-│   └── test_api.py
-├── Dockerfile.backend
-├── Dockerfile.frontend
-├── docker-compose.yml
-├── .github/
-│   └── workflows/
-│       └── deploy.yml       GitHub Actions CI/CD
-└── README.md
-
 ## CI/CD Pipeline
 
 Every push to the main branch triggers GitHub Actions which:
@@ -208,32 +175,11 @@ Every push to the main branch triggers GitHub Actions which:
 3. Runs import verification tests
 4. If tests pass, Railway auto-deploys the new version
 
-## Cost Analysis
-
-| Service | Plan | Cost |
-|---|---|---|
-| Groq API | Free tier | Rs 0/month |
-| Supabase PostgreSQL | Free tier | Rs 0/month |
-| Railway hosting | Free tier | Rs 0/month |
-| Tesseract OCR | Open source | Rs 0/month |
-| **Total** | | **Rs 0/month** |
-
-## Interview Topics This Project Covers
-
-- Microservices architecture and service separation
-- OCR pipeline design and image preprocessing
-- LLM integration and prompt engineering
-- JWT authentication and token-based security
-- Database schema design with foreign key relationships
-- Fraud detection algorithm design
-- Docker containerization and multi-service orchestration
-- CI/CD with GitHub Actions
-- Cloud deployment on Railway
-- REST API design with OpenAPI specification
-- Production error handling and logging
-
 ## Author
 
 Siddhi Deshmukh
+Mayuri Shinde
+Samruddhi Misal 
+Priyanka Bhosale
 - GitHub: https://github.com/Siddhi-3843
 - Project: XpenseIQ — AI Expense Scanner
