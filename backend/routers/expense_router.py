@@ -660,6 +660,7 @@ def approve_expense(
 ):
     """Move a pending expense to approved and send email via Gmail SMTP."""
     print(f"DEBUG APPROVE: expense_id={expense_id}, owner_email='{owner_email}'")
+    print(f"DEBUG RESEND KEY EXISTS: {bool(os.getenv('RESEND_API_KEY', ''))}")
 
     expense = db.query(Expense).filter(
         Expense.id      == expense_id,
