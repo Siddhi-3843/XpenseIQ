@@ -203,8 +203,8 @@ def show_main_app():
     page_map = {
         "dashboard": show_dashboard,
         "scan": show_scan_page,
-        "expenses": show_expenses_page,
         "pending": show_pending_page,
+        "expenses": show_expenses_page,
         "rejected": show_rejected_page,
         "reports": show_reports_page,
     }
@@ -1004,6 +1004,203 @@ def show_scan_page():
                       </div>
                     </div>
                     """, unsafe_allow_html=True)
+
+def show_pending_page():
+    st.cache_data.clear()
+    st.title("Pending Verification")
+    st.caption("Flagged expenses awaiting review. These are NOT counted in totals.")
+
+    with st.spinner("Loading pending expenses..."):
+        try:
+            response = requests.get(
+                f"{BACKEND_URL}/expenses/pending",
+                headers=get_headers()
+            )
+            response.raise_for_status()
+            expenses = response.json().get("expenses", [])
+        except requests.exceptions.HTTPError as e:
+            st.error(f"Server error ({e.response.status_code}): Could not load expenses.")
+            return
+        except requests.exceptions.RequestException as e:
+            st.error(f"Network error: {str(e)}")
+            return
+
+    if not expenses:
+        st.success("No expenses pending verification. Everything looks clean!")
+        return
+
+    risk_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    for e in expenses:
+        risk = e.get("fraud_risk_score", 0) or 0
+        risk_counts["HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.5 else "LOW"] += 1
+
+    col_h, col_m, col_l = st.columns(3, gap="large")
+
+    with col_h:
+        st.markdown(f"""
+        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+            padding:22px 24px;border-top:4px solid #EF4444;
+            box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
+        <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
+            letter-spacing:.08em;margin-bottom:12px;">High Risk</div>
+        <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
+            {risk_counts["HIGH"]}
+        </div>
+        <div style="font-size:12px;color:#EF4444;margin-top:8px;font-weight:600;">
+            🔴 Needs immediate review
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_m:
+        st.markdown(f"""
+        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+            padding:22px 24px;border-top:4px solid #F59E0B;
+            box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
+        <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
+            letter-spacing:.08em;margin-bottom:12px;">Medium Risk</div>
+        <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
+            {risk_counts["MEDIUM"]}
+        </div>
+        <div style="font-size:12px;color:#F59E0B;margin-top:8px;font-weight:600;">
+            🟡 Monitor closely
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_l:
+        st.markdown(f"""
+        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
+            padding:22px 24px;border-top:4px solid #22C55E;
+            box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
+        <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
+            letter-spacing:.08em;margin-bottom:12px;">Low Risk</div>
+        <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
+            {risk_counts["LOW"]}
+        </div>
+        <div style="font-size:12px;color:#22C55E;margin-top:8px;font-weight:600;">
+            🟢 Likely clean
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+    st.divider()
+
+    for expense in expenses:
+        expense_id = expense.get("id")
+        risk = expense.get("fraud_risk_score", 0) or 0
+        flags = expense.get("fraud_flags", [])
+        risk_label = "HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.5 else "LOW"
+        risk_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}[risk_label]
+        confirm_key = f"confirm_{expense_id}"
+
+        with st.expander(
+            f"{risk_icon} ID #{expense_id} — {expense.get('vendor_name', 'Unknown')} — "
+            f"Rs {expense.get('total_amount', 0):,.0f} — Risk: {risk:.2f} ({risk_label})",
+            expanded=True
+        ):
+            col1, col2, col3 = st.columns([2, 2, 1])
+
+            with col1:
+                st.write("**Vendor:**", expense.get("vendor_name", "—"))
+                st.write("**Amount:**", f"Rs {expense.get('total_amount', 0):,.2f}")
+                st.write("**Category:**", expense.get("primary_category", "—"))
+                st.write("**Date:**", expense.get("transaction_date", "—"))
+
+            with col2:
+                if risk >= 0.7:
+                    st.error(f"🔴 Fraud Risk: {risk:.2f} — {risk_label}")
+                elif risk >= 0.5:
+                    st.warning(f"🟡 Fraud Risk: {risk:.2f} — {risk_label}")
+                else:
+                    st.info(f"🟢 Fraud Risk: {risk:.2f} — {risk_label}")
+                st.write("**OCR Confidence:**", f"{expense.get('confidence_score', 0):.0%}")
+                if flags:
+                    st.write("**Fraud Flags:**")
+                    for flag in flags:
+                        st.write(f"- {flag}")
+
+            with col3:
+                state = st.session_state.get(confirm_key)
+
+                if state == "approve":
+                    st.warning("Confirm approval?")
+                    owner_email = st.text_input(
+                        "Owner email",
+                        value=st.session_state.get(f"email_{expense_id}", ""),
+                        key=f"email_input_app_{expense_id}",
+                        placeholder="owner@company.com"
+                    )
+                    if st.button("✅ Yes, Approve", key=f"yes_app_{expense_id}", use_container_width=True):
+                        if not owner_email or "@" not in owner_email:
+                            st.error("Valid email required.")
+                        else:
+                            r = requests.put(
+                                f"{BACKEND_URL}/expenses/{expense_id}/approve",
+                                headers=get_headers(),
+                                params={"vendor_email": owner_email}
+                            )
+                            del st.session_state[confirm_key]
+                            if r.status_code == 200:
+                                data = r.json()
+                                if data.get("email_sent"):
+                                    st.success("Approved! Email sent.")
+                                else:
+                                    st.success("Approved!")
+                                st.rerun()
+                            else:
+                                st.error(f"Failed ({r.status_code})")
+                    if st.button("Cancel", key=f"cancel_app_{expense_id}", use_container_width=True):
+                        del st.session_state[confirm_key]
+                        st.rerun()
+
+                elif state == "reject":
+                    st.warning("Confirm rejection?")
+                    owner_email = st.text_input(
+                        "Owner email",
+                        value=st.session_state.get(f"email_{expense_id}", ""),
+                        key=f"email_input_rej_{expense_id}",
+                        placeholder="owner@company.com"
+                    )
+                    rejection_reason = st.text_input(
+                        "Rejection reason",
+                        key=f"reason_{expense_id}",
+                        placeholder="e.g. Duplicate submission"
+                    )
+                    if st.button("❌ Yes, Reject", key=f"yes_rej_{expense_id}", use_container_width=True):
+                        if not owner_email or "@" not in owner_email:
+                            st.error("Valid email required.")
+                        else:
+                            r = requests.put(
+                                f"{BACKEND_URL}/expenses/{expense_id}/reject",
+                                headers=get_headers(),
+                                params={"vendor_email": owner_email}
+                            )
+                            del st.session_state[confirm_key]
+                            if r.status_code == 200:
+                                data = r.json()
+                                if data.get("email_sent"):
+                                    st.success("Rejected! Email sent.")
+                                else:
+                                    st.success("Rejected!")
+                                st.rerun()
+                            else:
+                                st.error(f"Failed ({r.status_code})")
+                    if st.button("Cancel", key=f"cancel_rej_{expense_id}", use_container_width=True):
+                        del st.session_state[confirm_key]
+                        st.rerun()
+
+                else:
+                    if st.button("✅ Approve", key=f"app_{expense_id}", use_container_width=True):
+                        st.session_state[confirm_key] = "approve"
+                        st.session_state[f"email_{expense_id}"] = expense.get("owner_email", "")
+                        st.rerun()
+                    if st.button("❌ Reject", key=f"rej_{expense_id}", use_container_width=True):
+                        st.session_state[confirm_key] = "reject"
+                        st.session_state[f"email_{expense_id}"] = expense.get("owner_email", "")
+                        st.rerun()
+
     
 def show_expenses_page():
     st.cache_data.clear()
@@ -1250,201 +1447,6 @@ def show_expenses_page():
     except Exception as e:
         st.error(f"Could not load expenses: {str(e)}")
 
-def show_pending_page():
-    st.cache_data.clear()
-    st.title("Pending Verification")
-    st.caption("Flagged expenses awaiting review. These are NOT counted in totals.")
-
-    with st.spinner("Loading pending expenses..."):
-        try:
-            response = requests.get(
-                f"{BACKEND_URL}/expenses/pending",
-                headers=get_headers()
-            )
-            response.raise_for_status()
-            expenses = response.json().get("expenses", [])
-        except requests.exceptions.HTTPError as e:
-            st.error(f"Server error ({e.response.status_code}): Could not load expenses.")
-            return
-        except requests.exceptions.RequestException as e:
-            st.error(f"Network error: {str(e)}")
-            return
-
-    if not expenses:
-        st.success("No expenses pending verification. Everything looks clean!")
-        return
-
-    risk_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
-    for e in expenses:
-        risk = e.get("fraud_risk_score", 0) or 0
-        risk_counts["HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.5 else "LOW"] += 1
-
-    col_h, col_m, col_l = st.columns(3, gap="large")
-
-    with col_h:
-        st.markdown(f"""
-        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-            padding:22px 24px;border-top:4px solid #EF4444;
-            box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
-        <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
-            letter-spacing:.08em;margin-bottom:12px;">High Risk</div>
-        <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
-            {risk_counts["HIGH"]}
-        </div>
-        <div style="font-size:12px;color:#EF4444;margin-top:8px;font-weight:600;">
-            🔴 Needs immediate review
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_m:
-        st.markdown(f"""
-        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-            padding:22px 24px;border-top:4px solid #F59E0B;
-            box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
-        <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
-            letter-spacing:.08em;margin-bottom:12px;">Medium Risk</div>
-        <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
-            {risk_counts["MEDIUM"]}
-        </div>
-        <div style="font-size:12px;color:#F59E0B;margin-top:8px;font-weight:600;">
-            🟡 Monitor closely
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_l:
-        st.markdown(f"""
-        <div style="background:#FFFFFF;border:1px solid #F0DCE4;border-radius:16px;
-            padding:22px 24px;border-top:4px solid #22C55E;
-            box-shadow:0 2px 12px rgba(45,27,46,.07);min-height:120px;">
-        <div style="font-size:10px;font-weight:700;color:#8A6D7C;text-transform:uppercase;
-            letter-spacing:.08em;margin-bottom:12px;">Low Risk</div>
-        <div style="font-size:32px;font-weight:800;color:#2D1B2E;line-height:1;">
-            {risk_counts["LOW"]}
-        </div>
-        <div style="font-size:12px;color:#22C55E;margin-top:8px;font-weight:600;">
-            🟢 Likely clean
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-    st.divider()
-
-    for expense in expenses:
-        expense_id = expense.get("id")
-        risk = expense.get("fraud_risk_score", 0) or 0
-        flags = expense.get("fraud_flags", [])
-        risk_label = "HIGH" if risk >= 0.7 else "MEDIUM" if risk >= 0.5 else "LOW"
-        risk_icon = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}[risk_label]
-        confirm_key = f"confirm_{expense_id}"
-
-        with st.expander(
-            f"{risk_icon} ID #{expense_id} — {expense.get('vendor_name', 'Unknown')} — "
-            f"Rs {expense.get('total_amount', 0):,.0f} — Risk: {risk:.2f} ({risk_label})",
-            expanded=True
-        ):
-            col1, col2, col3 = st.columns([2, 2, 1])
-
-            with col1:
-                st.write("**Vendor:**", expense.get("vendor_name", "—"))
-                st.write("**Amount:**", f"Rs {expense.get('total_amount', 0):,.2f}")
-                st.write("**Category:**", expense.get("primary_category", "—"))
-                st.write("**Date:**", expense.get("transaction_date", "—"))
-
-            with col2:
-                if risk >= 0.7:
-                    st.error(f"🔴 Fraud Risk: {risk:.2f} — {risk_label}")
-                elif risk >= 0.5:
-                    st.warning(f"🟡 Fraud Risk: {risk:.2f} — {risk_label}")
-                else:
-                    st.info(f"🟢 Fraud Risk: {risk:.2f} — {risk_label}")
-                st.write("**OCR Confidence:**", f"{expense.get('confidence_score', 0):.0%}")
-                if flags:
-                    st.write("**Fraud Flags:**")
-                    for flag in flags:
-                        st.write(f"- {flag}")
-
-            with col3:
-                state = st.session_state.get(confirm_key)
-
-                if state == "approve":
-                    st.warning("Confirm approval?")
-                    owner_email = st.text_input(
-                        "Owner email",
-                        value=st.session_state.get(f"email_{expense_id}", ""),
-                        key=f"email_input_app_{expense_id}",
-                        placeholder="owner@company.com"
-                    )
-                    if st.button("✅ Yes, Approve", key=f"yes_app_{expense_id}", use_container_width=True):
-                        if not owner_email or "@" not in owner_email:
-                            st.error("Valid email required.")
-                        else:
-                            r = requests.put(
-                                f"{BACKEND_URL}/expenses/{expense_id}/approve",
-                                headers=get_headers(),
-                                params={"vendor_email": owner_email}
-                            )
-                            del st.session_state[confirm_key]
-                            if r.status_code == 200:
-                                data = r.json()
-                                if data.get("email_sent"):
-                                    st.success("Approved! Email sent.")
-                                else:
-                                    st.success("Approved!")
-                                st.rerun()
-                            else:
-                                st.error(f"Failed ({r.status_code})")
-                    if st.button("Cancel", key=f"cancel_app_{expense_id}", use_container_width=True):
-                        del st.session_state[confirm_key]
-                        st.rerun()
-
-                elif state == "reject":
-                    st.warning("Confirm rejection?")
-                    owner_email = st.text_input(
-                        "Owner email",
-                        value=st.session_state.get(f"email_{expense_id}", ""),
-                        key=f"email_input_rej_{expense_id}",
-                        placeholder="owner@company.com"
-                    )
-                    rejection_reason = st.text_input(
-                        "Rejection reason",
-                        key=f"reason_{expense_id}",
-                        placeholder="e.g. Duplicate submission"
-                    )
-                    if st.button("❌ Yes, Reject", key=f"yes_rej_{expense_id}", use_container_width=True):
-                        if not owner_email or "@" not in owner_email:
-                            st.error("Valid email required.")
-                        else:
-                            r = requests.put(
-                                f"{BACKEND_URL}/expenses/{expense_id}/reject",
-                                headers=get_headers(),
-                                params={"vendor_email": owner_email}
-                            )
-                            del st.session_state[confirm_key]
-                            if r.status_code == 200:
-                                data = r.json()
-                                if data.get("email_sent"):
-                                    st.success("Rejected! Email sent.")
-                                else:
-                                    st.success("Rejected!")
-                                st.rerun()
-                            else:
-                                st.error(f"Failed ({r.status_code})")
-                    if st.button("Cancel", key=f"cancel_rej_{expense_id}", use_container_width=True):
-                        del st.session_state[confirm_key]
-                        st.rerun()
-
-                else:
-                    if st.button("✅ Approve", key=f"app_{expense_id}", use_container_width=True):
-                        st.session_state[confirm_key] = "approve"
-                        st.session_state[f"email_{expense_id}"] = expense.get("owner_email", "")
-                        st.rerun()
-                    if st.button("❌ Reject", key=f"rej_{expense_id}", use_container_width=True):
-                        st.session_state[confirm_key] = "reject"
-                        st.session_state[f"email_{expense_id}"] = expense.get("owner_email", "")
-                        st.rerun()
 
 def show_rejected_page():
     st.cache_data.clear()
