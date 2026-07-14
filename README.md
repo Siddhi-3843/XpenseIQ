@@ -9,7 +9,8 @@ An enterprise-grade AI-powered expense management system that automatically extr
 
 ## Live Demo
 
-- **Dashboard:** https://frontend-production-fdc9.up.railway.app
+- **Dashboard:** https://radiant-tranquility-production.up.railway.app/
+                 https://frontend-production-fdc9.up.railway.app
 - **API Docs:** https://xpenseiq-production.up.railway.app/docs
 
 ## Features
@@ -153,8 +154,6 @@ Every push to the main branch triggers GitHub Actions which:
 ## Author
 
 1. Siddhi Deshmukh
-2. Mayuri Shinde
-3. Samruddhi Misal 
-4. Priyanka Bhosale
+
 - GitHub: https://github.com/Siddhi-3843
 - Project: XpenseIQ — AI Expense Scanner
